@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
 	"github.com/aws/aws-sdk-go/service/waf"
+	"github.com/aws/aws-sdk-go/service/wafregional"
 	mp "github.com/mackerelio/go-mackerel-plugin"
 )
 
@@ -31,10 +32,17 @@ var graphdef = map[string]mp.Graphs{
 type WafPlugin struct {
 	AccessKeyID     string
 	SecretAccessKey string
+	Region          string
 	WebACLID        string
 	WebACL          string
 	Rules           []string
 	CloudWatch      *cloudwatch.CloudWatch
+}
+
+// WAFer provides GetWebACL and GetRule API operations.
+type WAFer interface {
+	GetWebACL(*waf.GetWebACLInput) (*waf.GetWebACLOutput, error)
+	GetRule(*waf.GetRuleInput) (*waf.GetRuleOutput, error)
 }
 
 func (p *WafPlugin) prepare() error {
@@ -47,9 +55,18 @@ func (p *WafPlugin) prepare() error {
 	if p.AccessKeyID != "" && p.SecretAccessKey != "" {
 		config = config.WithCredentials(credentials.NewStaticCredentials(p.AccessKeyID, p.SecretAccessKey, ""))
 	}
-	config = config.WithRegion("us-east-1")
+	if p.Region != "" {
+		config = config.WithRegion(p.Region)
+	} else {
+		config = config.WithRegion("us-east-1")
+	}
 
-	svc := waf.New(sess, config)
+	var svc WAFer
+	if p.Region == "" {
+		svc = waf.New(sess, config)
+	} else {
+		svc = wafregional.New(sess, config)
+	}
 	response, err := svc.GetWebACL(&waf.GetWebACLInput{
 		WebACLId: aws.String(p.WebACLID),
 	})
@@ -126,6 +143,12 @@ func (p WafPlugin) FetchMetrics() (map[string]float64, error) {
 				Value: aws.String(p.WebACL),
 			},
 		}
+		if p.Region != "" {
+			dimensions = append(dimensions, &cloudwatch.Dimension{
+				Name:  aws.String("Region"),
+				Value: aws.String(p.Region),
+			})
+		}
 
 		for _, met := range [...]string{"AllowedRequests", "BlockedRequests", "CountedRequests"} {
 			v, err := p.getLastPoint(dimensions, met)
@@ -149,6 +172,7 @@ func (p WafPlugin) GraphDefinition() map[string]mp.Graphs {
 func Do() {
 	optAccessKeyID := flag.String("access-key-id", "", "AWS Access Key ID")
 	optSecretAccessKey := flag.String("secret-access-key", "", "AWS Secret Access Key")
+	optRegion := flag.String("region", "", "AWS Region")
 	optWebACLID := flag.String("web-acl-id", "", "AWS Web ACL ID")
 	optTempfile := flag.String("tempfile", "", "Temp file name")
 	flag.Parse()
@@ -158,6 +182,7 @@ func Do() {
 	waf.WebACLID = *optWebACLID
 	waf.AccessKeyID = *optAccessKeyID
 	waf.SecretAccessKey = *optSecretAccessKey
+	waf.Region = *optRegion
 
 	err := waf.prepare()
 	if err != nil {
