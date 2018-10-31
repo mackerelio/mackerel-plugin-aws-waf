@@ -6,7 +6,7 @@ AWS WAF custom metrics plugin for mackerel.io agent.
 ## Synopsis
 
 ```shell
-mackerel-plugin-aws-waf -web-acl-id=<aws-waf-web-acl-id> [-access-key-id=<id>] [-secret-access-key=<key>] [-tempfile=<tempfile>]
+mackerel-plugin-aws-waf -web-acl-id=<aws-waf-web-acl-id> [-access-key-id=<id>] [-secret-access-key=<key>] [-region=<region>] [-tempfile=<tempfile>]
 ```
 
 ## AWS IAM Policy
@@ -22,7 +22,3 @@ the credential provided manually or fetched automatically by IAM Role should hav
 [plugin.metrics.aws-waf]
 command = "/path/to/mackerel-plugin-aws-waf -web-acl-id=your-web-acl-id"
 ```
-
-## Notes
-
-This plugin only supports AWS WAF for CloudFront, and not the metrics of WAF for ALB.
